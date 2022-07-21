@@ -1,0 +1,417 @@
+---
+title: "activity_temp_circadian"
+author: "nbergum"
+date: "6/24/2022"
+output: html_document
+---
+
+```{r}
+library(readxl) 
+library(dplyr)
+library(behavr)
+library(data.table)
+library(ggetho)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(lme4)
+library(EnvStats)
+```
+
+
+Import and organize data from trials 3-6
+```{r}
+morph3 <- read_excel("C:\\Users\\nikbe\\Documents\\Vigh Lab\\morphine trial 3\\RethmoicsTrial3all.xlsx")
+morph3$t <- as.numeric(morph3$t)
+morph3$hour <- as.POSIXct(morph3$t,format="%H", origin = '6:53:00')
+now <- as.POSIXct(Sys.Date(),format="%H", origin = '6:53:00')
+morph3$day <- yday(morph3$hour) - yday(now)
+morph3$hour <- hour(morph3$hour)
+str(morph3)
+morph3 <- na.omit(morph3)
+#View(morph3)
+
+morph4 <- read_excel("C:\\Users\\nikbe\\Documents\\Vigh Lab\\morphine trial 4\\RethomicsdataTrial4.xlsx")
+morph4$t <- as.numeric(morph4$t) + 86400 #added time to line up trial start times
+morph4$hour <- as.POSIXct(morph4$t,format="%H", origin = '7:03:00')
+now <- as.POSIXct(Sys.Date(),format="%H", origin = '7:03:00')
+morph4$day <- yday(morph4$hour) - yday(now)
+morph4$hour <- hour(morph4$hour)
+str(morph4)
+#morph4 <- na.omit(morph4)
+#View(morph4)
+morph3and4 <- merge(morph3, morph4, all = T)
+
+morph5 <- read_excel("C:\\Users\\nikbe\\Documents\\Vigh Lab\\morphine trial 5\\Morphine Trail 5 Data R.xlsx")
+morph5$t <- as.numeric(morph5$t)
+morph5$hour <- as.POSIXct(morph5$t,format="%H", origin = '12:35:00')
+now <- as.POSIXct(Sys.Date(),format="%H", origin = '12:35:00')
+morph5$day <- yday(morph5$hour) - yday(now)
+morph5$hour <- hour(morph5$hour)
+str(morph5)
+morph5 <- na.omit(morph5)
+morph5
+morph345 <- merge(morph3and4, morph5, all=T)
+
+morph6 <- read_excel("C:\\Users\\nikbe\\Documents\\Vigh Lab\\morphine trial 6\\Morphine Trial 6 Data R.xlsx")
+morph6$t <- as.numeric(morph6$t)
+morph6$t <- morph6$t + 96840
+morph6$hour <- as.POSIXct(morph6$t,format="%H", origin = '07:01:00')
+now <- as.POSIXct(Sys.Date(),format="%H", origin = '07:01:00')
+morph6$day <- yday(morph6$hour) - yday(now) + 1
+morph6$hour <- hour(morph6$hour)
+str(morph6)
+morph6 <- na.omit(morph6)
+#View(morph345)
+
+morph3456 <- merge(morph345, morph6, all=T)
+#View(morph3456)
+```
+
+Import and organize data from trial 7
+```{r}
+morph7 <- read_excel("C:\\Users\\nikbe\\Documents\\Vigh Lab\\morphine trial 7\\trial_7_combined.xlsx")
+morph7$t <- as.numeric(morph7$t)
+morph7$t <- morph7$t + 96840 + 300 -3600
+morph7$hour <- as.POSIXct(morph7$t,format="%H", origin = '07:06:00')
+now <- as.POSIXct(Sys.Date(),format="%H", origin = '07:06:00')
+morph7$day <- yday(morph7$hour) - yday(now) + 1
+morph7$hour <- hour(morph7$hour)
+str(morph7)
+morph7 <- na.omit(morph7)
+#View(morph7)
+```
+
+
+Combine data from all trials and run summary statistics
+```{r}
+library(plyr)
+morph7$Condition <- revalue(morph7$Condition, c("MKO"="KO"))
+morph34567 <- merge(morph3456, morph7, all=T)
+morph34567_ld <- subset(morph34567, day %in% c("7", "8", "13", "17"))
+morph34567_ld$day <- as.factor(morph34567_ld$day)
+morph34567_ld$day <- revalue(morph34567_ld$day, c("7"="Saline", "8"="Morphine Day 1", "13"="Morphine Day 6", "17"="Morphine Day 10"))
+morph34567_ld <- dplyr::mutate(morph34567_ld, phase= ifelse(hour>11, "dark", "light"))
+
+SumStat34567 <- dplyr::summarise(group_by(morph34567_ld, Condition, hour, id, day, phase, Trial),
+n = n(),
+Mean = mean(Activity),
+sum=sum(Activity),
+sqrt=sqrt(Mean),
+sd = sd(Activity),
+se = sd/sqrt(n), 
+mean_Temp = mean(Temp),
+sd_Temp = sd(Temp),
+se_Temp =sd_Temp/sqrt(n))
+
+write.table(SumStat34567 , file = "C:\\Users\\nikbe\\Documents\\Vigh Lab\\ipRGC_MORs\\sumstats_all.csv", sep=",", row.names=FALSE)
+
+morph34567_ld$Condition <- factor(morph34567_ld$Condition , levels=c('WT', 'McKO', 'KO'))
+morph34567_ld$phase <- factor(morph34567_ld$phase , levels=c('light', 'dark'))
+```
+
+Compare activity between dark and light phases: data wrangling and visualizations
+```{r}
+SumStat34567_ld <- dplyr::summarise(group_by(morph34567_ld,Condition, phase, id, day, Trial),
+n = n(),
+Mean = mean(Activity),
+sum=sum(Activity),
+sqrt=sqrt(Mean),
+sd = sd(Activity),
+se = sd/sqrt(n), 
+mean_Temp = mean(Temp),
+sd_Temp = sd(Temp),
+se_Temp =sd_Temp/sqrt(n))
+SumStat34567_ld
+#View(SumStat34567_ld)
+
+SumStat_ld <- dplyr::summarise(group_by(SumStat34567_ld,Condition, phase, day),
+n = n(),
+mean = mean(Mean),
+sd = sd(Mean),
+se = sd/sqrt(n), 
+sqrt = mean(sqrt(Mean)),
+sd_sqrt = sd(sqrt(Mean)),
+se_sqrt = sd_sqrt/sqrt(n),
+mean_temp = mean(mean_Temp),
+sd_temp = sd(mean_Temp),
+se_temp =sd_temp/sqrt(n))
+
+SumStat_ld
+
+SumStat_ld$day <- as.factor(SumStat_ld$day)
+SumStat34567_ld$day <- as.factor(SumStat34567_ld$day)
+
+SumStat_ld
+
+Ld_activity <- ggplot() + 
+  geom_bar(data=SumStat_ld, aes(phase, mean, fill=phase), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_ld, aes(x=phase,ymin=mean - se, ymax=mean + se, fill=phase), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStat34567_ld, aes(x=phase, y=Mean, fill=phase), size = 1, position=position_dodge(width=0.5)) + scale_fill_manual(values =c("grey75", "grey30")) + ylim(0,0.25) + ylab("Horizontal Activity (a.u.)") + theme_bw()+ facet_grid(Condition~day)
+Ld_activity
+
+ggsave(file="Ld_activity.svg", plot=Ld_activity, width=6, height=4)
+
+ld_activity_sqrt <- ggplot() + 
+  geom_bar(data=SumStat_ld, aes(phase, sqrt, fill=phase), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_ld, aes(x=phase,ymin=sqrt - se_sqrt, ymax=sqrt + se_sqrt, fill=phase), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStat34567_ld, aes(x=phase, y=sqrt, fill=phase), size = 1, position=position_dodge(width=0.5)) + ylim(0,0.6) +  ylab("sqrt(Activity)
+") + theme_bw()+ facet_grid(Condition ~ day)
+ld_activity_sqrt
+
+ggsave(file="ld_activity_sqrt.svg", plot=ld_activity_sqrt, width=6, height=4)
+
+ld_activity_day <- ggplot() + 
+  geom_bar(data=SumStat_ld, aes(phase, mean, fill=Condition), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_ld, aes(x=phase,ymin=mean - se, ymax=mean + se, fill=Condition), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStat34567_ld, aes(x=phase, y=Mean, fill=Condition), size=1, position=position_dodge(width=0.5)) + theme_bw()+ ylim(0,0.3) + ylab("Horizontal Activity (a.u.)") +  facet_wrap(~day, ncol=2)
+ld_activity_day
+
+ggsave(file="ld_activity_day.svg", plot=ld_activity_day, width=6, height=4)
+```
+
+Phase activity comparisons by genotype
+```{r}
+WT_act_day <- ggplot(subset(SumStat_ld, Condition %in% c("WT")), aes(phase, mean, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean-se, ymax=mean+se, fill = day, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat34567_ld, aes(x=phase, y=Mean, fill=day), size=1.2, position=position_dodge(width=0.9)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + ylim(0,0.3) + ylab("Horizontal Activity (a.u.)") + theme_bw()+ ggtitle("Mufl")
+WT_act_day
+
+McKO_act_day <- ggplot(subset(SumStat_ld, Condition %in% c("McKO")), aes(phase, mean, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean-se, ymax=mean+se, fill = day, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat34567_ld, aes(x=phase, y=Mean, fill=day), size=1.2, position=position_dodge(width=0.9)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + ylim(0,0.3) + ylab("Horizontal Activity (a.u.)") + theme_bw()+ ggtitle("McKO")
+McKO_act_day
+
+KO_act_day <- ggplot(subset(SumStat_ld, Condition %in% c("KO")), aes(phase, mean, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean-se, ymax=mean+se, fill = day, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat34567_ld, aes(x=phase, y=Mean, fill=day), size=1.2, position=position_dodge(width=0.9)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + ylim(0,0.3) + ylab("Horizontal Activity (a.u.)") + theme_bw()+ ggtitle("KO")
+KO_act_day
+
+ggsave(file="WT_act_day.svg", plot=WT_act_day, width=6, height=4)
+ggsave(file="McKO_act_day.svg", plot=McKO_act_day, width=6, height=4)
+ggsave(file="KO_act_day.svg", plot=KO_act_day, width=6, height=4)
+```
+Compare activity between dark and light phases: statistics and analysis
+```{r}
+lm_sqrt <- lm(sqrt(Mean) ~phase*Condition*day, data=SumStat34567_ld)
+anova(lm_sqrt)
+emm_sqrt <- emmeans::emmeans(lm_sqrt, pairwise ~ phase|Condition*day, adjust = "tukey")
+emm_sqrt
+emms_sqrt <- emmeans::emmeans(lm_sqrt, pairwise ~ day|phase*Condition, adjust = "tukey")
+emms_sqrt
+par(mfrow=c(1,2)) 
+plot(lm_sqrt, which=c(1,2))
+shapiro.test(resid(lm_sqrt))
+
+lmer_ld <- lmer(Mean ~phase*Condition*day+(1|id), data=SumStat34567_ld)
+anova(lmer_ld)
+emm_lds <- emmeans::emmeans(lmer_ld, pairwise ~ phase|Condition*day, adjust = "tukey")
+emm_lds
+em_ld <- emmeans::emmeans(lmer_ld, pairwise ~ day|phase*Condition)
+em_ld
+eml_geno <- emmeans::emmeans(lmer_ld, pairwise ~ Condition|phase*day)
+eml_geno
+plot(lmer_ld, type=c("p","smooth"), col.line=1)
+lattice::qqmath(lmer_ld)
+shapiro.test(resid(lmer_ld))
+```
+
+Comparing differences in diurnal activity changes across days
+```{r}
+SumStat34567_ld
+SumStats_ld <- SumStat34567_ld %>% 
+  group_by(Condition, id, day, Trial) %>% 
+  dplyr::summarise(diff = (Mean[phase== "dark"] - Mean[phase== "light"]))
+SumStats_ld
+
+
+test1 <- rosnerTest(SumStats_ld$diff,
+  k = 3
+)
+test1
+SumStats_ld <- SumStats_ld %>% filter(diff  < 0.15)
+
+SumStat_diff <- dplyr::summarise(group_by(SumStats_ld,Condition, day),
+n = n(),
+mean_diff = mean(diff),
+sd_diff = sd(diff),
+se_diff = sd_diff/sqrt(n))
+
+SumStat_diff
+
+activity_diff <- ggplot() + 
+  geom_bar(data=SumStat_diff, aes(Condition, mean_diff, fill=day), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_diff, aes(x=Condition,ymin=mean_diff - se_diff, ymax=mean_diff + se_diff, fill=day), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStats_ld, aes(x=Condition, y=diff, fill=day), position=position_dodge(width=0.5)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + ylim(-0.05, 0.2) + ylab("Difference between dark-light phase") + theme_bw() 
+activity_diff
+
+activity_diff_facet <- ggplot() + 
+  geom_bar(data=SumStat_diff, aes(day, mean_diff, fill=day), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_diff, aes(x=day,ymin=mean_diff - se_diff, ymax=mean_diff + se_diff, fill=day), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStats_ld, aes(x=day, y=diff, fill=day), size = 1, position=position_dodge(width=0.5)) + ylim(-0.02, 0.15) + facet_grid(~Condition) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Difference between dark-light phase") + theme_bw()
+activity_diff_facet
+
+ggsave(file="activity_diff.svg", plot=activity_diff, width=6, height=4)
+ggsave(file="activity_diff_facet.svg", plot=activity_diff_facet, width=6, height=4)
+
+lmer_diff <- lmer(diff ~Condition*day+(1|id), data=SumStats_ld)
+anova(lmer_diff)
+emm_diff <- emmeans::emmeans(lmer_diff, pairwise ~ day|Condition, adjust = "tukey")
+emm_diff
+plot(lmer_diff, type=c("p","smooth"), col.line=1)
+lattice::qqmath(lmer_diff)
+shapiro.test(resid(lmer_diff))
+```
+
+Comparing body temp between dark and light phases: data wrangling, visualizations and analysis
+```{r}
+morph34567_ld <- morph34567_ld %>% filter(Temp  < 40.2)
+
+#outlier test
+testa <- rosnerTest(morph34567_ld$Temp,
+  k = 40
+)
+testa
+
+#remove outliers
+morph34567_ld <- morph34567_ld %>% filter(Temp  < 40.07)
+morph34567_ld <- morph34567_ld %>% filter(Temp  > 29.55)
+
+SumStat34567_day <- dplyr::summarise(group_by(morph34567_ld,Condition, hour, id, day, Trial),
+n = n(),
+Mean = mean(Activity),
+sum=sum(Activity),
+sqrt=sqrt(Mean),
+sd = sd(Activity),
+se = sd/sqrt(n), 
+mean_Temp = mean(Temp),
+sd_Temp = sd(Temp),
+se_Temp =sd_Temp/sqrt(n))
+
+SumStat_day <- dplyr::summarise(group_by(SumStat34567_day,Condition, hour, day),
+n = n(),
+mean = mean(Mean),
+sd = sd(Mean),
+se = sd/sqrt(n), 
+sqrt = mean(sqrt(Mean)),
+sd_sqrt = sd(sqrt(Mean)),
+se_sqrt = sd_sqrt/sqrt(n),
+mean_temp = mean(mean_Temp),
+sd_temp = sd(mean_Temp),
+se_temp =sd_temp/sqrt(n))
+
+SumStat_day
+
+ggplot(SumStat_day, aes(hour, mean_temp, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line()  + geom_errorbar(aes(ymin=mean_temp-se_temp, ymax=mean_temp+se_temp, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + facet_wrap(~day)
+
+ggplot(SumStat_day, aes(hour, mean_temp, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line()  + geom_errorbar(aes(ymin=mean_temp-se_temp, ymax=mean_temp+se_temp, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + facet_wrap(~Condition, ncol=2)
+
+SumStat_temp_all <- dplyr::summarise(group_by(morph34567_ld,Condition, day, phase, hour, id, Trial),
+n = n(),
+mean_Temp = mean(Temp),
+sd_Temp = sd(Temp),
+se_Temp =sd_Temp/sqrt(n))
+
+write.table(SumStat_temp_all , file = "C:\\Users\\nikbe\\Documents\\Vigh Lab\\ipRGC_MORs\\SumStat_temp_all.csv", sep=",", row.names=FALSE)
+
+SumStat_temp_ld <- dplyr::summarise(group_by(morph34567_ld,Condition, phase, id, day, Trial),
+n = n(),
+mean_Temp = mean(Temp),
+sd_Temp = sd(Temp),
+se_Temp =sd_Temp/sqrt(n))
+
+SumStat_temp <- dplyr::summarise(group_by(SumStat_temp_ld,Condition, phase, day),
+n = n(),
+mean_temp = mean(mean_Temp),
+sd_temp = sd(mean_Temp),
+se_temp =sd_temp/sqrt(n))
+SumStat_temp
+
+temp_ld <- ggplot() + 
+  geom_bar(data=SumStat_temp, aes(phase, mean_temp, fill=phase), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_ld, aes(x=phase,ymin=mean_temp - se_temp, ymax=mean_temp + se_temp, fill=phase), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStat34567_ld, aes(x=phase, y=mean_Temp, fill=phase), size = 1, position=position_dodge(width=0.5)) + coord_cartesian(ylim=c(32, 40)) + ylab("Body Temperature (°C)") + scale_fill_manual(values =c("grey75", "grey30")) + theme_bw() + facet_grid(Condition ~ day)
+temp_ld
+
+temp_ld_day <-ggplot() + 
+  geom_bar(data=SumStat_temp, aes(phase, mean_temp, fill=Condition), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_ld, aes(x=phase,ymin=mean_temp - se_temp, ymax=mean_temp + se_temp, fill=Condition), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStat34567_ld, aes(x=phase, y=mean_Temp, fill=Condition), size =1, position=position_dodge(width=0.5)) + coord_cartesian(ylim=c(32, 40)) + ylab("Body Temperature (°C)") + theme_bw()+ facet_wrap(~day)
+temp_ld_day
+
+ggsave(file="temp_ld.svg", plot=temp_ld, width=6, height=4)
+ggsave(file="temp_ld_day.svg", plot=temp_ld_day, width=6, height=4)
+
+lmer_temp <- lmer(mean_Temp ~phase*Condition*day+(1|id), data=SumStat_temp_ld)
+anova(lmer_temp)
+emm_temp <- emmeans::emmeans(lmer_temp, pairwise ~ phase|Condition*day)
+emm_temp
+emm_tempg <- emmeans::emmeans(lmer_temp, pairwise ~ Condition|phase*day)
+emm_tempg
+emm_tempe <- emmeans::emmeans(lmer_temp, pairwise ~ day|Condition*phase)
+emm_tempe
+plot(lmer_temp, type=c("p","smooth"), col.line=1)
+lattice::qqmath(lmer_temp)
+shapiro.test(resid(lmer_temp))
+```
+
+```{r}
+WT_temp_day <- ggplot(subset(SumStat_temp, Condition %in% c("WT")), aes(phase, mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean_temp-sd_temp, ymax=mean_temp+sd_temp, fill = day, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat34567_ld, aes(x=phase, y=mean_Temp, fill=day), size=1.2, position=position_dodge(width=0.9)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + coord_cartesian(ylim=c(32, 40)) + ylab("Body Temperature (°C)")+ theme_bw()+ ggtitle("Mufl")
+WT_temp_day
+
+McKO_temp_day <- ggplot(subset(SumStat_temp, Condition %in% c("McKO")), aes(phase, mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean_temp-sd_temp, ymax=mean_temp+sd_temp, fill = day, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat34567_ld, aes(x=phase, y=mean_Temp, fill=day), size=1.2, position=position_dodge(width=0.9)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + coord_cartesian(ylim=c(32, 40)) + ylab("Body Temperature (°C)")+ theme_bw()+ ggtitle("McKO")
+McKO_temp_day
+
+KO_temp_day <- ggplot(subset(SumStat_temp, Condition %in% c("KO")), aes(phase, mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean_temp-sd_temp, ymax=mean_temp+sd_temp, fill = day, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat34567_ld, aes(x=phase, y=mean_Temp, fill=day), size=1.2, position=position_dodge(width=0.9)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + coord_cartesian(ylim=c(32, 40)) + ylab("Body Temperature (°C)")+ theme_bw()+ ggtitle("KO")
+KO_temp_day
+
+ggsave(file="WT_temp_day.svg", plot=WT_temp_day, width=6, height=4)
+ggsave(file="McKO_temp_day.svg", plot=McKO_temp_day, width=6, height=4)
+ggsave(file="KO_temp_day.svg", plot=KO_temp_day, width=6, height=4)
+```
+
+Comparing differences in diurnal temperature changes across days
+```{r}
+str(SumStat_temp_ld)
+SumStats_ldt <- SumStat_temp_ld %>% 
+  group_by(Condition, id, day, Trial) %>% 
+  dplyr::summarise(temp_diff = (mean_Temp[phase== "dark"] - mean_Temp[phase== "light"]))
+
+#outlier test
+test <- rosnerTest(SumStats_ldt$temp_diff,
+  k = 6
+)
+test
+
+SumStats_ldt <- SumStats_ldt %>% filter(temp_diff > -0.5)
+
+
+SumStat_difft <- dplyr::summarise(group_by(SumStats_ldt,Condition, day),
+n = n(),
+mtemp_diff = mean(temp_diff),
+sd_tdiff = sd(temp_diff),
+se_tdiff = sd_tdiff/sqrt(n))
+
+SumStat_difft
+
+
+
+temp_diff <- ggplot() + 
+  geom_bar(data=SumStat_difft, aes(Condition, mtemp_diff, fill=day), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_difft, aes(x=Condition,ymin=mtemp_diff - se_tdiff, ymax=mtemp_diff + se_tdiff, fill=day), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStats_ldt, aes(x=Condition, y=temp_diff, fill=day), position=position_dodge(width=0.5)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + ylab("Diurnal amplitude (°C)") + ylim(0,2.5) + theme_bw()
+temp_diff
+
+temp_diff2 <- ggplot() + 
+  geom_bar(data=SumStat_difft, aes(day, mtemp_diff, fill=day), stat="identity", position=position_dodge(width=0.5), width=0.5) +
+  geom_errorbar(data=SumStat_difft, aes(x=day,ymin=mtemp_diff - se_tdiff, ymax=mtemp_diff + se_tdiff, fill=day), position=position_dodge(width=0.5), width=.2,) + 
+  geom_point(data=SumStats_ldt, aes(x=day, y=temp_diff, fill=day), position=position_dodge(width=0.5)) +  scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) + ylab("Diurnal amplitude (°C)") + ylim(0,2.5) + theme_bw() + facet_grid(~Condition)
+temp_diff2
+
+ggsave(file="temp_diff.svg", plot=temp_diff, width=6, height=4)
+ggsave(file="temp_diff2.svg", plot=temp_diff2, width=6, height=4)
+
+lmer_tdiff <- lmer(temp_diff ~Condition*day+(1|id), data=SumStats_ldt)
+anova(lmer_tdiff)
+emm_tdiff <- emmeans::emmeans(lmer_diff, pairwise ~ day|Condition, adjust = "tukey")
+emm_tdiff
+emm_tdiff2 <- emmeans::emmeans(lmer_diff, pairwise ~ Condition|day, adjust = "tukey")
+emm_tdiff2
+plot(lmer_tdiff, type=c("p","smooth"), col.line=1)
+lattice::qqmath(lmer_tdiff)
+shapiro.test(resid(lmer_tdiff))
+```

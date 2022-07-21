@@ -1,0 +1,106 @@
+---
+title: "temp_analysis"
+author: "nbergum"
+date: "6/23/2022"
+output: html_document
+---
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(lme4)
+```
+
+Body temperature data organization and analysis
+```{r}
+SumStat_temp_all<- read.csv("C:\\Users\\nikbe\\Documents\\Vigh Lab\\ipRGC_MORs\\SumStat_temp_all.csv")
+SumStat_temp_all
+
+SumStat_temp_all$Condition <- factor(SumStat_temp_all$Condition , levels=c('WT', 'McKO', 'KO'))
+SumStat_temp_all$phase <- factor(SumStat_temp_all$phase , levels=c('light', 'dark'))
+SumStat_temp_all$day <- factor(SumStat_temp_all$day , levels=c('Saline', 'Morphine Day 1', 'Morphine Day 6', 'Morphine Day 10'))
+
+SumStat_temp_allcut <- subset(SumStat_temp_all, hour %in% c("1","2","13","14"))
+SumStat_temp_allcut
+
+SumStat34567t_all <- dplyr::summarise(group_by(SumStat_temp_all, Condition, hour, phase, day, ),
+n = n(),
+temp= mean(mean_Temp),
+sd_temp = sd(mean_Temp),
+se_temp = sd_temp/sqrt(n))
+
+SumStat34567t_allcut <- subset(SumStat34567t_all, hour %in% c("1","2","13","14"))
+SumStat34567t_allcut
+
+lm_temp_all <- lmer(mean_Temp ~ Condition*day*phase+(1|id), data=SumStat_temp_allcut)
+anova(lm_temp_all)
+em_all1t <- emmeans::emmeans(lm_temp_all, pairwise ~ day|Condition*phase)
+em_all1t
+em_all2t <- emmeans::emmeans(lm_temp_all, pairwise ~ Condition|phase*day)
+em_all2t
+plot(lm_temp_all, type=c("p","smooth"), col.line=1)
+lattice::qqmath(lm_temp_all)
+shapiro.test(resid(lm_temp_all))
+```
+
+Data visualization by day
+```{r}
+SumStat34567t_all$Condition <- factor(SumStat34567t_all$Condition , levels=c('WT', 'McKO', 'KO'))
+SumStat34567t_all$day <- factor(SumStat34567t_all$day , levels=c('Saline', 'Morphine Day 1', 'Morphine Day 6', 'Morphine Day 10'))
+
+ggplot(SumStat34567t_all, aes(hour, temp, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=temp-se_temp, ymax=temp+se_temp, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + scale_color_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) +  ylab("Body Temperature (°C)") + theme_bw() + facet_wrap(~Condition)
+
+WT_temp <- ggplot(subset(SumStat34567t_all, Condition %in% c("WT")), aes(hour, temp, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=temp-se_temp, ymax=temp+se_temp, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") +  ylim(33, 36.5) + scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + scale_color_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw() +  ggtitle("Mufl")
+WT_temp
+
+McKO_temp <- ggplot(subset(SumStat34567t_all, Condition %in% c("McKO")), aes(hour, temp, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=temp-se_temp, ymax=temp+se_temp, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") +  ylim(33, 36.5) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + scale_color_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw() +  ggtitle("McKO")
+McKO_temp
+
+KO_temp <- ggplot(subset(SumStat34567t_all, Condition %in% c("KO")), aes(hour, temp, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=temp-se_temp, ymax=temp+se_temp, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") +  ylim(33, 36.5) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + scale_color_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw() +  ggtitle("MKO")
+KO_temp
+
+ggsave(file="WT_temp.svg", plot=WT_temp, width=6, height=4)
+ggsave(file="McKO_temp.svg", plot=McKO_temp, width=6, height=4)
+ggsave(file="KO_temp.svg", plot=KO_temp, width=6, height=4)
+
+SumStat.temp.all <- dplyr::summarise(group_by(SumStat_temp_allcut,Condition, phase, day),
+n = n(),
+Mean_temp= mean(mean_Temp),
+std_temp = sd(mean_Temp),
+ste_temp = std_temp/sqrt(n))
+
+SumStat.temp.all
+
+ggplot(SumStat.temp.all, aes(phase, Mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=Mean_temp-std_temp, ymax=Mean_temp+std_temp, fill = day, width=.5), position=position_dodge(0.9))  + geom_point(data=SumStat_temp_allcut, aes(x=phase, y=mean_Temp, fill=day), size = 1, position=position_dodge(width=0.9)) + facet_wrap(~Condition) + coord_cartesian(ylim=c(32, 40)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw()
+
+WT_temp_cut <- ggplot(subset(SumStat.temp.all, Condition %in% c("WT")), aes(phase, Mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=Mean_temp-std_temp, ymax=Mean_temp+std_temp, fill = day, width=.5), position=position_dodge(0.9)) + coord_cartesian(ylim=c(32, 40)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw() +  ggtitle("Mufl")
+WT_temp_cut
+
+McKO_temp_cut <- ggplot(subset(SumStat.temp.all, Condition %in% c("McKO")), aes(phase, Mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=Mean_temp-std_temp, ymax=Mean_temp+std_temp, fill = day, width=.5), position=position_dodge(0.9)) + coord_cartesian(ylim=c(32, 40)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw() + ggtitle("McKO")
+McKO_temp_cut
+
+KO_temp_cut <- ggplot(subset(SumStat.temp.all, Condition %in% c("KO")), aes(phase, Mean_temp, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=Mean_temp-std_temp, ymax=Mean_temp+std_temp, fill = day, width=.5), position=position_dodge(0.9)) + coord_cartesian(ylim=c(32, 40)) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Body Temperature (°C)") + theme_bw() + ggtitle("MKO")
+KO_temp_cut
+
+ggsave(file="WT_temp_cut.svg", plot=WT_temp_cut, width=6, height=4)
+ggsave(file="McKO_temp_cut.svg", plot=McKO_temp_cut, width=6, height=4)
+ggsave(file="KO_temp_cut.svg", plot=KO_temp_cut, width=6, height=4)
+```
+
+Data visualization by genotype
+```{r}
+temp_by_hour <- ggplot(SumStat34567t_all, aes(hour, temp, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = Condition))  + geom_errorbar(aes(ymin=temp-se_temp, ymax=temp+se_temp, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + ylab("Body Temperature (°C)") + facet_wrap(~day,ncol = 2) 
+temp_by_hour
+
+temp_by_day <- ggplot(SumStat.temp.all, aes(phase, Mean_temp, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=Mean_temp-ste_temp, ymax=Mean_temp+ste_temp, fill = Condition, width=.5), position=position_dodge(0.9)) + geom_point(data=SumStat_temp_allcut, aes(x=phase, y=mean_Temp, fill=Condition), size = 1, position=position_dodge(width=0.9)) + coord_cartesian(ylim=c(32, 40)) + theme_bw()+ ylab("Body Temperature (°C)")+ facet_wrap(~day, ncol=2)
+temp_by_day
+
+temp_by_day2 <- ggplot(SumStat.temp.all, aes(phase, Mean_temp, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=Mean_temp-std_temp, ymax=Mean_temp+std_temp, fill = Condition, width=.5), position=position_dodge(0.9)) + coord_cartesian(ylim=c(32, 40)) + theme_bw()+ ylab("Body Temperature (°C)")+ facet_wrap(~day, ncol=2)
+temp_by_day2
+
+ggsave(file="temp_by_hour.svg", plot=temp_by_hour, width=6, height=4)
+ggsave(file="temp_by_day.svg", plot=temp_by_day, width=6, height=4)
+ggsave(file="temp_by_day2.svg", plot=temp_by_day2, width=6, height=4)
+```

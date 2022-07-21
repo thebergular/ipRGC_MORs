@@ -1,0 +1,149 @@
+---
+title: "activity_analysis"
+author: "nbergum"
+date: "6/23/2022"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(lme4)
+```
+
+Activity data organization and analysis
+```{r}
+SumStat_all<- read.csv("C:\\Users\\nikbe\\Documents\\Vigh Lab\\ipRGC_MORs\\sumstats_all.csv")
+SumStat_all
+
+SumStat_all$day <- factor(SumStat_all$day , levels=c('Saline', 'Morphine Day 1', 'Morphine Day 6', 'Morphine Day 10'))
+SumStat_all$Condition <- factor(SumStat_all$Condition , levels=c('WT', 'McKO', 'KO'))
+SumStat_all$phase <- factor(SumStat_all$phase , levels=c('light', 'dark'))
+
+SumStat_allcut <- subset(SumStat_all, hour %in% c("1","2","13","14"))
+SumStat_allcut
+
+SumStat34567_all <- dplyr::summarise(group_by(SumStat_all, Condition, hour, phase, day, ),
+n = n(),
+mean_activity= mean(Mean),
+square_activity=mean(sqrt(Mean)),
+sd_act = sd(Mean),
+se_act = sd_act/sqrt(n))
+
+SumStat34567_allcut <- subset(SumStat34567_all, hour %in% c("1","2","13","14"))
+SumStat34567_allcut
+
+
+lmer_all <- lmer(sqrt(Mean) ~ Condition*day*phase+(1|id), data=SumStat_allcut)
+anova(lmer_all)
+em_all1 <- emmeans::emmeans(lmer_all, pairwise ~ day|Condition*phase)
+em_all1
+em_all2 <- emmeans::emmeans(lmer_all, pairwise ~ Condition|phase*day)
+em_all2
+plot(lmer_all, type=c("p","smooth"), col.line=1)
+lattice::qqmath(lmer_all)
+shapiro.test(resid(lmer_all))
+```
+Data visualization by day
+```{r}
+WT_activity <- ggplot(subset(SumStat34567_all, Condition %in% c("WT")), aes(hour, mean_activity, color = day))+ geom_point(aes(shape=day, fill = day),stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + scale_color_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4")) +  ylab("Activity") + theme_bw() + ggtitle("Mufl")
+WT_activity
+
+McKO_activity <- ggplot(subset(SumStat34567_all, Condition %in% c("McKO")), aes(hour, mean_activity, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) +  scale_color_manual(values =c("deepskyblue1", "red1", "red", "firebrick4"))+  ylab("Activity") + theme_bw() + ggtitle("McKO")
+McKO_activity
+
+KO_activity <- ggplot(subset(SumStat34567_all, Condition %in% c("KO")), aes(hour, mean_activity, color = day))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = day))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = day), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + scale_color_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+  ylab("Activity") + theme_bw()  + ggtitle("KO")
+KO_activity
+
+ggsave(file="WT_activity.svg", plot=WT_activity, width=6, height=4)
+ggsave(file="McKO_activity.svg", plot=McKO_activity, width=6, height=4)
+ggsave(file="KO_activity.svg", plot=KO_activity, width=6, height=4)
+
+SumStat.all <- dplyr::summarise(group_by(SumStat_allcut,Condition, phase, day),
+n = n(),
+mean= mean(Mean),
+sd_acti = sd(Mean),
+se_acti = sd_acti/sqrt(n),
+sqrt_act= mean(sqrt(Mean)),
+sd_sqrti = sd(sqrt(Mean)),
+se_sqrti = sd_sqrti/sqrt(n))
+
+
+
+SumStat_allcut$phase <- factor(SumStat_allcut$phase , levels=c('light', 'dark'))
+
+
+day_cut_raw <- ggplot(SumStat.all, aes(phase, mean, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean-se_acti, ymax=mean+se_acti, fill = day, width=.5), position=position_dodge(0.9))  + facet_grid(~Condition)  + scale_fill_manual(values =c("deepskyblue1", "deeppink", "red3", "tomato4"))+  ylab("Activity") + geom_point(data=SumStat_allcut, aes(x=phase, y=Mean, fill=day), size = 1, position=position_dodge(width=0.9)) + theme_bw() + facet_grid(~Condition)
+day_cut_raw
+
+day_cut_sqrt <- ggplot(SumStat.all, aes(phase, sqrt_act, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = day, width=.5), position=position_dodge(0.9))+ylab("sqrt(Activity)")+ geom_point(data=SumStat_allcut, aes(x=phase, y=sqrt, fill=day), size = 1, position=position_dodge(width=0.9)) + ylim(0,0.7) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+ theme_bw() + facet_grid(~Condition)
+day_cut_sqrt
+
+day_cut_WT <- ggplot(subset(SumStat.all, Condition %in% c("WT")), aes(phase, sqrt_act, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = day, width=.5), position=position_dodge(0.9))+ylab("sqrt(Activity)")+ ylim(0,0.9) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+ theme_bw() + ggtitle("Mufl")
+day_cut_WT
+
+day_cut_McKO <- ggplot(subset(SumStat.all, Condition %in% c("McKO")), aes(phase, sqrt_act, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = day, width=.5), position=position_dodge(0.9))+ylab("sqrt(Activity)")+ ylim(0,0.9) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+ theme_bw()  + ggtitle("McKO")
+day_cut_McKO
+
+day_cut_KO <- ggplot(subset(SumStat.all, Condition %in% c("KO")), aes(phase, sqrt_act, fill = day))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = day, width=.5), position=position_dodge(0.9))+ylab("sqrt(Activity)")+ ylim(0,0.9) + scale_fill_manual(values =c("deepskyblue1", "red1", "red3", "firebrick4"))+ theme_bw()  + ggtitle("KO")
+day_cut_KO
+
+ggsave(file="day_cut_WT.svg", plot=day_cut_WT, width=6, height=4)
+ggsave(file="day_cut_McKO.svg", plot=day_cut_McKO, width=6, height=4)
+ggsave(file="day_cut_KO.svg", plot=day_cut_KO, width=6, height=4)
+```
+Data visualization by genotype
+```{r}
+
+
+
+act_all_days <- ggplot(SumStat34567_all, aes(hour, mean_activity, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = Condition))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + facet_wrap(~day,ncol = 2) 
+act_all_days
+  
+act_saline <- ggplot(subset(SumStat34567_all, day %in% c("Saline")), aes(hour, mean_activity, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = Condition))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + ylab("Activity") + ggtitle("Saline")
+act_saline
+
+act_m1 <- ggplot(subset(SumStat34567_all, day %in% c("Morphine Day 1")), aes(hour, mean_activity, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = Condition))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + ylab("Activity") + ggtitle("Morphine Day 1")
+act_m1
+
+act_m6 <- ggplot(subset(SumStat34567_all, day %in% c("Morphine Day 6")), aes(hour, mean_activity, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = Condition))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + ylab("Activity") + ggtitle("Morphine Day 6")
+act_m6
+
+act_m10 <- ggplot(subset(SumStat34567_all, day %in% c("Morphine Day 10")), aes(hour, mean_activity, color = Condition))+ geom_point(stat="identity", position=position_dodge(), size=2) + geom_line(aes(group = Condition))  + geom_errorbar(aes(ymin=mean_activity-se_act, ymax=mean_activity+se_act, fill = Condition), width=.5) +  annotate("rect", xmin = 12, xmax = 24, ymin = -Inf, ymax = Inf, alpha = .2, fill = "black") + ylim(0,0.3) +  scale_x_continuous(limits = c(-0.3, 24), breaks = seq(0, 25, by = 2)) + ylab("Activity") + ggtitle("Morphine Day 10")
+act_m10
+
+ggsave(file="act_all_days.svg", plot=act_all_days, width=6, height=4)
+ggsave(file="act_saline.svg", plot=act_saline, width=6, height=4)
+ggsave(file="act_m1.svg", plot=act_m1, width=6, height=4)
+ggsave(file="act_m6.svg", plot=act_m6, width=6, height=4)
+ggsave(file="act_m10.svg", plot=act_m10, width=6, height=4)
+
+ggplot(SumStat.all, aes(phase, mean, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=mean-se_acti, ymax=mean+se_acti, fill = Condition, width=.5), position=position_dodge(0.9))+ylab("Activity")+ geom_point(data=SumStat_allcut, aes(x=phase, y=Mean, fill=Condition), size = 1, position=position_dodge(width=0.9)) + ylim(0,0.25) + theme_bw()+ facet_grid(~day)
+
+act_sqrt <- ggplot(SumStat.all, aes(phase, sqrt_act, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-sd_sqrti, ymax=sqrt_act+sd_sqrti, fill = Condition, width=.5), position=position_dodge(0.9))+ ylab("sqrt(Activity)")+ ylim(0,0.8) + theme_bw()+ facet_wrap(~day, ncol=2)
+act_sqrt
+
+act_saline_sqrt <- ggplot(subset(SumStat.all, day %in% c("Saline")), aes(phase, sqrt_act, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = Condition, width=.5), position=position_dodge(0.9)) + ylab("sqrt(Activity)")+ ylim(0,0.8) + theme_bw()+ ggtitle("Saline")
+act_saline_sqrt
+
+act_m1_sqrt <- ggplot(subset(SumStat.all, day %in% c("Morphine Day 1")), aes(phase, sqrt_act, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = Condition, width=.5), position=position_dodge(0.9))+ geom_point(data=SumStat_allcut, aes(x=phase, y=sqrt, fill=Condition), size = 1, position=position_dodge(width=0.9)) + ylab("sqrt(Activity)")+ ylim(0,0.8) + theme_bw()+ ggtitle("Morphine Day 1")
+act_m1_sqrt
+
+act_m6_sqrt <- ggplot(subset(SumStat.all, day %in% c("Morphine Day 6")), aes(phase, sqrt_act, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = Condition, width=.5), position=position_dodge(0.9)) + ylab("sqrt(Activity)")+ ylim(0,0.8) + theme_bw()+ ggtitle("Morphine Day 6")
+act_m6_sqrt 
+
+act_m10_sqrt <- ggplot(subset(SumStat.all, day %in% c("Morphine Day 10")), aes(phase, sqrt_act, fill = Condition))+ geom_bar(stat="identity", position=position_dodge(), size=2)  + geom_errorbar(aes(ymin=sqrt_act-se_sqrti, ymax=sqrt_act+se_sqrti, fill = Condition, width=.5), position=position_dodge(0.9)) + ylab("sqrt(Activity)")+ ylim(0,0.8) + theme_bw()+ ggtitle("Morphine Day 10")
+act_m10_sqrt
+
+ggsave(file="act_sqrt.svg", plot=act_sqrt, width=6, height=4)
+ggsave(file="act_saline_sqrt.svg", plot=act_saline_sqrt, width=6, height=4)
+ggsave(file="act_m1_sqrt.svg", plot=act_m1_sqrt, width=6, height=4)
+ggsave(file="act_m6_sqrt.svg", plot=act_m6_sqrt, width=6, height=4)
+ggsave(file="act_m10_sqrt.svg", plot=act_m10_sqrt, width=6, height=4)
+```
+
+
+
+
+
